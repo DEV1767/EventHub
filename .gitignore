@@ -1,0 +1,9 @@
+node_modules
+.env
+.env.*
+*.log
+public/temp/*
+!public/temp/.gitkeep
+.DS_Store
+*.md
+test_runner.js
