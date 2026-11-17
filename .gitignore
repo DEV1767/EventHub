@@ -7,3 +7,17 @@ public/temp/*
 .DS_Store
 *.md
 test_runner.js
+
+# Python & AI
+python_ai/venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+chroma_db/
+qdrant_storage/
+*.sqlite3
