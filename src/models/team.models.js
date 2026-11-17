@@ -142,6 +142,25 @@ const TeamSchema=new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: "User"
     },
+    mealClaims: [{
+        slotId: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        slotName: {
+            type: String,
+            default: ""
+        },
+        claimedAt: {
+            type: Date,
+            default: Date.now
+        },
+        claimedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User"
+        }
+    }],
     submissionDocument: {
         url: {
             type: String,

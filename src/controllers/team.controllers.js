@@ -738,3 +738,266 @@ export const verifyQrCheckIn = asyncHandler(async (req, res) => {
         }, "Team successfully verified and checked in!")
     )
 })
+
+export const claimMealPass = asyncHandler(async (req, res) => {
+    const { qrData, eventId, slotId } = req.body
+
+    if (!qrData || !slotId) {
+        throw new ApiError(400, "qrData and slotId are required")
+    }
+
+    let resolvedTeamId = null
+    let resolvedRegNo = null
+    let resolvedEventId = eventId
+
+    const verified = verifyQrPayload(qrData)
+    if (verified.isValid) {
+        resolvedTeamId = verified.data.tid
+        resolvedRegNo = verified.data.reg
+        resolvedEventId = verified.data.eid
+    } else {
+        if (typeof qrData === "object" && qrData !== null) {
+            resolvedTeamId = qrData.teamId || qrData.tid
+            resolvedRegNo = qrData.regNo || qrData.reg
+            resolvedEventId = qrData.eventId || qrData.eid || eventId
+        } else if (typeof qrData === "string") {
+            try {
+                const parsed = JSON.parse(qrData)
+                resolvedTeamId = parsed.teamId || parsed.tid
+                resolvedRegNo = parsed.regNo || parsed.reg
+                resolvedEventId = parsed.eventId || parsed.eid || eventId
+            } catch {
+                const trimmed = qrData.trim()
+                if (mongoose.Types.ObjectId.isValid(trimmed)) {
+                    resolvedTeamId = trimmed
+                } else {
+                    resolvedRegNo = trimmed
+                }
+            }
+        }
+    }
+
+    const query = {}
+    if (resolvedTeamId && mongoose.Types.ObjectId.isValid(resolvedTeamId)) {
+        query._id = resolvedTeamId
+    } else if (resolvedRegNo) {
+        query.registrationNumber = resolvedRegNo
+    } else {
+        throw new ApiError(400, "Invalid QR code payload: Could not identify team")
+    }
+
+    if (resolvedEventId) {
+        query.eventId = resolvedEventId
+    }
+
+    const team = await Team.findOne(query).populate("eventId").populate("leaderId", "name email phonenumber")
+    if (!team) {
+        throw new ApiError(404, "Team registration not found for this QR pass")
+    }
+
+    const event = team.eventId
+    const isCreator = event.createdBy.toString() === req.user._id.toString()
+    const isCoordinator = event.coordinators?.some(c => c.toString() === req.user._id.toString()) ||
+                          await Coordinator.exists({ eventId: event._id, userId: req.user._id, invitationStatus: "accepted" })
+    const isStaffOrAdmin = ["faculty", "principal", "admin", "organiser"].includes(req.user.role?.toLowerCase())
+
+    if (!isCreator && !isCoordinator && !isStaffOrAdmin) {
+        throw new ApiError(403, "Only the event faculty in-charge or authorized coordinator can verify meal distribution")
+    }
+
+    if (event.isMealDistributionEnabled === false) {
+        throw new ApiError(400, "Meal distribution is currently disabled for this entire event")
+    }
+
+    if (team.registrationStatus !== "confirmed") {
+        throw new ApiError(400, `Cannot distribute meals to team with status: ${team.registrationStatus}`)
+    }
+
+    const regNo = team.registrationNumber || team._id.toString()
+
+    // 1. Find configured slot and verify it is currently enabled
+    const activeSlot = event.foodSlots?.find(s => s.slotId === slotId)
+    const slotName = activeSlot ? activeSlot.name : slotId
+
+    if (activeSlot && activeSlot.isActive === false) {
+        throw new ApiError(400, `Meal distribution for '${slotName}' is currently disabled/paused by coordinators or faculty`)
+    }
+
+    // 2. ATOMIC REDIS CHECK (Write-Behind Fast-Path: < 3ms)
+    const redisKey = `event:${event._id}:meal:${slotId}:claimed`
+    let wasAdded = 1
+    try {
+        wasAdded = await redisClient.sAdd(redisKey, regNo)
+    } catch (err) {
+        console.error("Redis sAdd error in meal claim:", err)
+    }
+
+    if (wasAdded === 0) {
+        return res.status(400).json(
+            new ApiResponse(400, {
+                alreadyClaimed: true,
+                slotId,
+                slotName,
+                teamName: team.teamName,
+                regNo
+            }, `Meal token for '${slotName}' has already been claimed for this pass!`)
+        )
+    }
+
+    // 3. RESPOND IMMEDIATELY TO VOLUNTEER (Instant Green Screen)
+    const memberCount = (team.members?.length || 0) + 1
+    res.status(200).json(
+        new ApiResponse(200, {
+            alreadyClaimed: false,
+            claimed: true,
+            teamId: team._id,
+            teamName: team.teamName,
+            registrationNumber: regNo,
+            slotId,
+            slotName,
+            memberCount,
+            leaderName: team.leaderId?.name,
+            claimedAt: new Date()
+        }, `Meal token verified! Distribute meal plates for '${slotName}'.`)
+    )
+
+    // 4. WRITE-BEHIND: Update MongoDB in the background without blocking the response
+    Team.updateOne(
+        { _id: team._id },
+        {
+            $push: {
+                mealClaims: {
+                    slotId,
+                    slotName,
+                    claimedAt: new Date(),
+                    claimedBy: req.user._id
+                }
+            }
+        }
+    ).catch(err => console.error("Background Mongo meal claim sync error:", err))
+})
+
+export const getMealStats = asyncHandler(async (req, res) => {
+    const { eventId, slotId } = req.params
+
+    const event = await Event.findById(eventId)
+    if (!event) {
+        throw new ApiError(404, "Event not found")
+    }
+
+    const isCreator = event.createdBy.toString() === req.user._id.toString()
+    const isCoordinator = event.coordinators?.some(c => c.toString() === req.user._id.toString()) ||
+                          await Coordinator.exists({ eventId: event._id, userId: req.user._id, invitationStatus: "accepted" })
+    const isStaffOrAdmin = ["faculty", "principal", "admin", "organiser"].includes(req.user.role?.toLowerCase())
+
+    if (!isCreator && !isCoordinator && !isStaffOrAdmin) {
+        throw new ApiError(403, "You do not have permission to view meal statistics")
+    }
+
+    const redisKey = `event:${eventId}:meal:${slotId}:claimed`
+    let claimedCount = 0
+    try {
+        claimedCount = await redisClient.sCard(redisKey)
+    } catch {
+        claimedCount = await Team.countDocuments({
+            eventId,
+            "mealClaims.slotId": slotId
+        })
+    }
+
+    const slotInfo = event.foodSlots?.find(s => s.slotId === slotId)
+
+    return res.status(200).json(
+        new ApiResponse(200, {
+            eventId,
+            slotId,
+            slotName: slotInfo ? slotInfo.name : slotId,
+            claimedCount,
+            startTime: slotInfo?.startTime,
+            endTime: slotInfo?.endTime,
+            isActive: slotInfo?.isActive ?? true
+        }, "Meal distribution statistics fetched successfully")
+    )
+})
+
+export const toggleMealSlot = asyncHandler(async (req, res) => {
+    const { eventId, slotId } = req.params
+
+    const event = await Event.findById(eventId)
+    if (!event) {
+        throw new ApiError(404, "Event not found")
+    }
+
+    // Both Faculty in-charge and appointed Coordinators have equal access to enable/disable
+    const isCreator = event.createdBy.toString() === req.user._id.toString()
+    const isCoordinator = event.coordinators?.some(c => c.toString() === req.user._id.toString()) ||
+                          await Coordinator.exists({ eventId: event._id, userId: req.user._id, invitationStatus: "accepted" })
+    const isStaffOrAdmin = ["faculty", "principal", "admin", "organiser"].includes(req.user.role?.toLowerCase())
+
+    if (!isCreator && !isCoordinator && !isStaffOrAdmin) {
+        throw new ApiError(403, "Only the event faculty in-charge or authorized coordinator can enable/disable meal distribution")
+    }
+
+    if (!event.foodSlots || event.foodSlots.length === 0) {
+        throw new ApiError(400, "No food slots configured for this event")
+    }
+
+    const slot = event.foodSlots.find(s => s.slotId === slotId)
+    if (!slot) {
+        throw new ApiError(404, `Meal slot '${slotId}' not found on this event`)
+    }
+
+    slot.isActive = !slot.isActive
+    await event.save()
+
+    // Sync active state to Redis for instant lookup
+    try {
+        await redisClient.set(`event:${eventId}:meal:${slotId}:active`, slot.isActive ? "1" : "0")
+    } catch (err) {
+        console.error("Redis sync error:", err)
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, {
+            eventId,
+            slotId,
+            name: slot.name,
+            isActive: slot.isActive
+        }, `Meal slot '${slot.name}' is now ${slot.isActive ? "enabled" : "disabled"} successfully`)
+    )
+})
+
+export const toggleEventMealDistribution = asyncHandler(async (req, res) => {
+    const { eventId } = req.params
+
+    const event = await Event.findById(eventId)
+    if (!event) {
+        throw new ApiError(404, "Event not found")
+    }
+
+    // Both Faculty in-charge and appointed Coordinators have equal access
+    const isCreator = event.createdBy.toString() === req.user._id.toString()
+    const isCoordinator = event.coordinators?.some(c => c.toString() === req.user._id.toString()) ||
+                          await Coordinator.exists({ eventId: event._id, userId: req.user._id, invitationStatus: "accepted" })
+    const isStaffOrAdmin = ["faculty", "principal", "admin", "organiser"].includes(req.user.role?.toLowerCase())
+
+    if (!isCreator && !isCoordinator && !isStaffOrAdmin) {
+        throw new ApiError(403, "Only the event faculty in-charge or authorized coordinator can toggle meal distribution")
+    }
+
+    event.isMealDistributionEnabled = !event.isMealDistributionEnabled
+    await event.save()
+
+    try {
+        await redisClient.set(`event:${eventId}:meal:enabled`, event.isMealDistributionEnabled ? "1" : "0")
+    } catch (err) {
+        console.error("Redis sync error:", err)
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, {
+            eventId,
+            isMealDistributionEnabled: event.isMealDistributionEnabled
+        }, `Event meal distribution has been ${event.isMealDistributionEnabled ? "enabled" : "disabled"} successfully`)
+    )
+})

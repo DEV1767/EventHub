@@ -265,6 +265,38 @@ const EventSchema = new mongoose.Schema({
         default: false
     },
 
+    isMealDistributionEnabled: {
+        type: Boolean,
+        default: true
+    },
+
+    foodSlots: [{
+        slotId: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        name: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        startTime: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        endTime: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        isActive: {
+            type: Boolean,
+            default: true
+        }
+    }],
+
     submissionSettings: {
         isRequired: {
             type: Boolean,

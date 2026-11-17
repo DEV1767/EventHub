@@ -9,7 +9,11 @@ import {
     submitFinalPayment,
     verifyFinalPayment,
     getTeamQrPass,
-    verifyQrCheckIn
+    verifyQrCheckIn,
+    claimMealPass,
+    getMealStats,
+    toggleMealSlot,
+    toggleEventMealDistribution
 } from "../controllers/team.controllers.js"
 import { verifyJWT } from "../middlewares/auth.middleware.js"
 import { upload } from "../middlewares/multer.middlewares.js"
@@ -55,5 +59,17 @@ router.route("/:teamId/qr-pass")
 
 router.route("/verify-qr-checkin")
     .post(verifyJWT, verifyQrCheckIn)
+
+router.route("/claim-meal-pass")
+    .post(verifyJWT, claimMealPass)
+
+router.route("/events/:eventId/meal-stats/:slotId")
+    .get(verifyJWT, getMealStats)
+
+router.route("/events/:eventId/meal-slots/:slotId/toggle")
+    .patch(verifyJWT, toggleMealSlot)
+
+router.route("/events/:eventId/meal-distribution/toggle")
+    .patch(verifyJWT, toggleEventMealDistribution)
 
 export default router
