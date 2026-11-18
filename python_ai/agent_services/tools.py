@@ -1,9 +1,6 @@
 from langchain_core.tools import tool
 from bson import ObjectId
-from agent_services.db_client import get_redis, get_db
-
-db = get_db()
-r = get_redis()
+from agent_services.db_client import get_redis, get_db, db
 
 
 @tool
@@ -58,6 +55,7 @@ def get_gate_attendance(event_id: str, department: str = "") -> str:
 @tool
 def get_meal_stats(event_id: str, slot_id: str) -> str:
     """Queries Redis to get live counts of claimed meal plates for a slot (e.g. lunch, breakfast)."""
+    r = get_redis()
     if not r:
         return "Redis is not connected."
     redis_key = f"event:{event_id}:meal:{slot_id}:claimed"

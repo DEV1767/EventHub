@@ -1,8 +1,14 @@
 import os
+import sys
 from dotenv import load_dotenv, find_dotenv
 
 # Automatically finds and loads .env from the root project folder
 load_dotenv(find_dotenv())
+
+# Ensure root python_ai directory is in sys.path
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 from langchain_community.retrievers import BM25Retriever
 try:
@@ -16,6 +22,16 @@ from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_groq import ChatGroq
+
+try:
+    from guardrials import GuardrailEngine
+except ImportError:
+    from python_ai.guardrials import GuardrailEngine
+
+try:
+    from prompts import EVENT_RAG_PROMPT_TEMPLATE, EVENT_RAG_EMPTY_CONTEXT_FALLBACK
+except ImportError:
+    from python_ai.prompts import EVENT_RAG_PROMPT_TEMPLATE, EVENT_RAG_EMPTY_CONTEXT_FALLBACK
 
 
 class AdvanceEventRAG:
@@ -48,21 +64,21 @@ class AdvanceEventRAG:
         self.llm = ChatGroq(model="openai/gpt-oss-20b", temperature=0.1)
 
     def ask(self, query: str, event_title: str) -> str:
-        # Retrieve top  
+        # 1. Input Guardrail: Fast regex & safety check
+        is_safe, message = GuardrailEngine.fast_rag_input_check(query)
+        if not is_safe:
+            return message
+
+        # 2. Retrieve top reranked chunks
         relevant_docs = self.final_retriever.invoke(query)
+        if not relevant_docs:
+            return EVENT_RAG_EMPTY_CONTEXT_FALLBACK
+
         context = "\n\n".join([doc.page_content for doc in relevant_docs])
 
-        prompt = ChatPromptTemplate.from_template("""
-You are the official EventHub coordinator assistant for {event_title}.
-Answer the student question based strictly on this verified context:
-
-{context}
-
-Question: {query}
-
-Instructions:
-1. If the answer cannot be found in the context, say: "I do not have information regarding that in the official event details. Please contact the coordinators."
-2. Keep the answer direct and factual without guessing.
-""")
+        prompt = ChatPromptTemplate.from_template(EVENT_RAG_PROMPT_TEMPLATE)
         chain = prompt | self.llm | StrOutputParser()
-        return chain.invoke({"event_title": event_title, "context": context, "query": query})
+        raw_answer = chain.invoke({"event_title": event_title, "context": context, "query": query})
+
+        # 3. Output Guardrail: PII Masking
+        return GuardrailEngine.mask_pii_output(raw_answer)

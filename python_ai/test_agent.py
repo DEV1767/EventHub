@@ -1,7 +1,11 @@
 import os
+import sys
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
+
+# Ensure python_ai directory is in sys.path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from agent_services.ai_services import EventOperationsAgent
 from agent_services.db_client import get_db

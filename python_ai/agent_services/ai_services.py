@@ -1,12 +1,28 @@
 import os
+import sys
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
+
+# Ensure root python_ai directory is in sys.path
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage
 from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
+
+try:
+    from guardrials import GuardrailEngine
+except ImportError:
+    from python_ai.guardrials import GuardrailEngine
+
+try:
+    from prompts import OPERATIONS_AGENT_SYSTEM_PROMPT
+except ImportError:
+    from python_ai.prompts import OPERATIONS_AGENT_SYSTEM_PROMPT
 
 from agent_services.tools import (
     get_budget_status,
@@ -35,16 +51,7 @@ class EventOperationsAgent:
         ]
 
         self.memory = MemorySaver()
-
-        self.system_prompt = (
-            "You are the official EventHub Operations Assistant for faculty in-charges and student coordinators.\n"
-            "Your job is to assist with live event-day operations, attendance, gate check-in, payments, and budgets.\n\n"
-            "Strict Guidelines:\n"
-            "1. ALWAYS call the appropriate tool to fetch live data from the database. NEVER guess numbers, team names, or payment statuses.\n"
-            "2. When the user asks about an event, always pass the authorized 'event_id' to the tools.\n"
-            "3. Format your answers in clean, professional Markdown with bullet points or tables.\n"
-            "4. If a query cannot be answered by the available tools, politely state so."
-        )
+        self.system_prompt = OPERATIONS_AGENT_SYSTEM_PROMPT
 
         self.graph = create_react_agent(
             model=self.llm,
@@ -55,8 +62,13 @@ class EventOperationsAgent:
 
     def ask(self, event_id: str, query: str, thread_id: str = "default_session") -> str:
         """
-        Executes a query through the LangGraph agent with conversation memory.
+        Executes a query through the LangGraph agent with conversation memory and input guardrails.
         """
+        # 1. Agent Input Guardrail
+        is_safe, message = GuardrailEngine.guard_agent_input(event_id, query)
+        if not is_safe:
+            return message
+
         prompt_with_context = f"[Context: Authorized Event ID = {event_id}]\n\nQuestion: {query}"
         config = {"configurable": {"thread_id": thread_id}}
 

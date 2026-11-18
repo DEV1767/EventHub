@@ -1,8 +1,12 @@
 import os
+import sys
 from dotenv import load_dotenv, find_dotenv
 
 # Load root .env
 load_dotenv(find_dotenv())
+
+# Ensure python_ai directory is in sys.path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from Rag_services.loader import EventDocumentLoader
 from Rag_services.vector_store import QdrantVectorService
