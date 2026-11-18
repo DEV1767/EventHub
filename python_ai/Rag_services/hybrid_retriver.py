@@ -61,7 +61,12 @@ class AdvanceEventRAG:
         )
 
         #  Groq LLM 
-        self.llm = ChatGroq(model="openai/gpt-oss-20b", temperature=0.1)
+        self.llm = ChatGroq(
+            model="openai/gpt-oss-20b",
+            temperature=0.1,
+            max_tokens=150,
+            model_kwargs={"extra_body": {"reasoning_effort": "low"}}
+        )
 
     def ask(self, query: str, event_title: str) -> str:
         # 1. Input Guardrail: Fast regex & safety check

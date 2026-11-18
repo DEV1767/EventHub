@@ -39,8 +39,13 @@ class EventOperationsAgent:
     Uses multi-turn conversation memory and deterministic tool calling.
     """
 
-    def __init__(self, model_name: str = "openai/gpt-oss-20b"):
-        self.llm = ChatGroq(model=model_name, temperature=0.0)
+    def __init__(self, model_name: str = "openai/gpt-oss-20b", max_tokens: int = 150):
+        self.llm = ChatGroq(
+            model=model_name,
+            temperature=0.0,
+            max_tokens=max_tokens,
+            model_kwargs={"extra_body": {"reasoning_effort": "low"}}
+        )
 
         self.tools = [
             get_event_overview,
