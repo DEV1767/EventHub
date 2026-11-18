@@ -70,8 +70,13 @@ class GuardrailEngine:
         "get_meal_stats"
     }
 
-    def __init__(self, model_name: str = "openai/gpt-oss-20b"):
-        self.judge_llm = ChatGroq(model=model_name, temperature=0.0)
+    def __init__(self, model_name: str = "openai/gpt-oss-safeguard-20b", max_tokens: int = 600):
+        self.judge_llm = ChatGroq(
+            model=model_name,
+            temperature=0.0,
+            max_tokens=max_tokens,
+            model_kwargs={"response_format": {"type": "json_object"}}
+        )
 
     # ==========================================
     #           STUDENT RAG GUARDRAILS
