@@ -2,10 +2,8 @@ import os
 import sys
 from dotenv import load_dotenv, find_dotenv
 
-# Load root .env
 load_dotenv(find_dotenv())
 
-# Ensure python_ai directory is in sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from Rag_services.loader import EventDocumentLoader
@@ -36,17 +34,12 @@ sample_event = {
 }
 
 def main():
-    print("--- 1. Chunking Event with Loader ---")
     loader = EventDocumentLoader()
     docs = loader.load_from_dict(sample_event)
-    print(f"Generated {len(docs)} chunks with event_id metadata.")
 
-    print("\n--- 2. Upserting Chunks to Qdrant Cloud ---")
     qdrant = QdrantVectorService()
     qdrant.upsert_documents(docs)
-    print("Chunks successfully stored in Qdrant!")
 
-    print("\n--- 3. Initializing Hybrid RAG (BM25 + Qdrant + Reranker) ---")
     scoped_qdrant_retriever = qdrant.vector_store.as_retriever(
         search_kwargs={
             "k": 5,

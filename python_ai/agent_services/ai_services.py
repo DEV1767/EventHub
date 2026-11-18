@@ -4,7 +4,6 @@ from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
 
-# Ensure root python_ai directory is in sys.path
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
@@ -15,9 +14,9 @@ from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 
 try:
-    from guardrials import GuardrailEngine
+    from guardrails import GuardrailEngine
 except ImportError:
-    from python_ai.guardrials import GuardrailEngine
+    from python_ai.guardrails import GuardrailEngine
 
 try:
     from prompts import OPERATIONS_AGENT_SYSTEM_PROMPT
@@ -34,11 +33,6 @@ from agent_services.tools import (
 
 
 class EventOperationsAgent:
-    """
-    LangGraph-powered Operations Copilot for Faculty and Event Coordinators.
-    Uses multi-turn conversation memory and deterministic tool calling.
-    """
-
     def __init__(self, model_name: str = "openai/gpt-oss-20b", max_tokens: int = 150):
         self.llm = ChatGroq(
             model=model_name,
@@ -66,10 +60,6 @@ class EventOperationsAgent:
         )
 
     def ask(self, event_id: str, query: str, thread_id: str = "default_session") -> str:
-        """
-        Executes a query through the LangGraph agent with conversation memory and input guardrails.
-        """
-        # 1. Agent Input Guardrail
         is_safe, message = GuardrailEngine.guard_agent_input(event_id, query)
         if not is_safe:
             return message

@@ -6,10 +6,6 @@ from langchain_community.document_loaders import PyPDFLoader
 
 
 class EventDocumentLoader:
-    """
-    Handles chunking and metadata formatting for EventHub data and PDF rulebooks.
-    Ensures every chunk is stamped with 'event_id' for Qdrant payload filtering.
-    """
     def __init__(self, chunk_size: int = 600, chunk_overlap: int = 80):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
@@ -19,9 +15,7 @@ class EventDocumentLoader:
             separators=["\n\n", "\n", "• ", "- ", ". ", " ", ""]
         )
 
-    ## load from DB
     def load_from_dict(self, event: Dict[str, Any]) -> List[Document]:
-        """Parses a MongoDB event document into structured LangChain Documents."""
         event_id = str(event.get("_id") or event.get("id", ""))
         title = event.get("title", "Untitled Event")
         base_metadata = {
@@ -38,7 +32,6 @@ class EventDocumentLoader:
             else f"Team of {team_size.get('min', 1)} to {team_size.get('max', 1)} members"
         )
 
-        # 1. Overview & Logistics
         event_content = (
             f"Event: {title}\n"
             f"Category: {event.get('category', 'N/A')}\n"
@@ -51,7 +44,6 @@ class EventDocumentLoader:
         )
         raw_docs.append(Document(page_content=event_content, metadata={**base_metadata, "doc_type": "overview"}))
 
-        # 2. Eligibility & Instructions
         eligibility_info = (
             f"Event: {title}\n"
             f"Eligibility: {event.get('eligibility', 'Open to all students')}\n"
@@ -60,7 +52,6 @@ class EventDocumentLoader:
         )
         raw_docs.append(Document(page_content=eligibility_info, metadata={**base_metadata, "doc_type": "eligibility"}))
 
-        # 3. Rules & Regulations
         rules = event.get("rules", [])
         if rules:
             formatted_rules = "\n".join([f"{i+1}. {rule}" for i, rule in enumerate(rules)])
@@ -71,7 +62,6 @@ class EventDocumentLoader:
             )
             raw_docs.append(Document(page_content=rules_content, metadata={**base_metadata, "doc_type": "rules"}))
 
-        # 4. Certificates & Organizer Contact
         cert = event.get("certificate", {})
         cert_info = f"Certificate Provided: {'Yes' if cert.get('isProvided', True) else 'No'} (Type: {cert.get('type', 'Participation')})"
 
@@ -84,10 +74,8 @@ class EventDocumentLoader:
         raw_docs.append(Document(page_content=contact_content, metadata={**base_metadata, "doc_type": "contact_and_certs"}))
 
         return self.splitter.split_documents(raw_docs)
-    
-    ##load from pdf
+
     def load_from_pdf(self, file_path: str, event_id: str, title: str = "", college_name: str = "") -> List[Document]:
-        """Extracts text from an external rulebook/brochure PDF and tags chunks with event_id."""
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"PDF file does not exist: {file_path}")
 
@@ -103,12 +91,9 @@ class EventDocumentLoader:
                 "source_file": os.path.basename(file_path)
             })
 
-        # Return outside the loop after all pages are tagged
         return self.splitter.split_documents(pages)
 
-    ## upload custom msgs on event day 
     def load_from_text(self, text: str, event_id: str, title: str = "", doc_type: str = "custom") -> List[Document]:
-        """Helper to chunk raw strings with metadata."""
         chunks = self.splitter.split_text(text)
         return [
             Document(

@@ -11,10 +11,6 @@ load_dotenv()
 
 
 class QdrantVectorService:
-    """
-    Connects to Qdrant Cloud using your locally cached BAAI/bge-small-en-v1.5 model (384 dims).
-    """
-
     def __init__(self, collection_name: str = "eventhub_knowledge"):
         self.collection_name = collection_name
         self.qdrant_url = os.getenv("QDRANT_URL")
@@ -23,25 +19,20 @@ class QdrantVectorService:
         if not self.qdrant_url or not self.qdrant_api_key:
             raise ValueError("QDRANT_URL and QDRANT_API_KEY must be set in your .env")
 
-        # 1. Connect to Qdrant Cloud
         self.client = QdrantClient(
             url=self.qdrant_url,
             api_key=self.qdrant_api_key
         )
 
-        # 2. Load your cached local model (loads instantly from your .cache)
         self.embeddings = HuggingFaceEmbeddings(
             model_name="BAAI/bge-small-en-v1.5",
             model_kwargs={"device": "cpu"},
             encode_kwargs={"normalize_embeddings": True}
         )
 
-        # 3. Vector dimension: 384 for bge-small-en-v1.5
         self.vector_dim = 384
-
         self._ensure_collection_exists()
 
-        # 4. LangChain Vector Store wrapper
         self.vector_store = QdrantVectorStore(
             client=self.client,
             collection_name=self.collection_name,
@@ -49,7 +40,6 @@ class QdrantVectorService:
         )
 
     def _ensure_collection_exists(self):
-        """Creates the collection in Qdrant with 384-dim configuration."""
         collections = [c.name for c in self.client.get_collections().collections]
         if self.collection_name not in collections:
             self.client.create_collection(
@@ -58,13 +48,11 @@ class QdrantVectorService:
             )
 
     def upsert_documents(self, documents: List[Document]) -> List[str]:
-        """Uploads chunked documents into Qdrant Cloud."""
         if not documents:
             return []
         return self.vector_store.add_documents(documents)
 
     def search_event_chunks(self, query: str, event_id: str, top_k: int = 4) -> List[Document]:
-        """Scoped search filtered strictly by event_id."""
         event_filter = models.Filter(
             must=[
                 models.FieldCondition(

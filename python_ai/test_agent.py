@@ -4,7 +4,6 @@ from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
 
-# Ensure python_ai directory is in sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from agent_services.ai_services import EventOperationsAgent
@@ -14,11 +13,8 @@ db = get_db()
 
 
 def main():
-    print("--- 1. Initializing LangGraph Event Operations Agent ---")
     agent = EventOperationsAgent(model_name="openai/gpt-oss-20b")
-    print("Agent graph initialized successfully with memory!")
 
-    # Find the first real event in MongoDB, or fallback to mock ID
     event = db.events.find_one({})
     if event:
         event_id = str(event["_id"])

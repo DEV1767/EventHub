@@ -1,10 +1,3 @@
-"""
-EventHub Global Prompt Registry
-Centralized repository for all system prompts, RAG templates, and guardrail judge prompts.
-"""
-
-# STUDENT RAG INQUIRY PROMPTS
-
 EVENT_RAG_PROMPT_TEMPLATE = """You are the official EventHub coordinator assistant for {event_title}.
 Answer the student question based strictly on this verified context:
 
@@ -24,10 +17,6 @@ EVENT_RAG_EMPTY_CONTEXT_FALLBACK = (
     "No official details could be retrieved for this event yet. Please check back later."
 )
 
-
-
-#  FACULTY & COORDINATOR OPERATIONS AGENT PROMPTS
-
 OPERATIONS_AGENT_SYSTEM_PROMPT = """You are the official EventHub Operations Assistant for faculty in-charges and student coordinators.
 Your job is to assist with live event-day operations, attendance, gate check-in, payments, and budgets.
 
@@ -37,11 +26,6 @@ Strict Guidelines:
 3. Format your answers in clean, professional Markdown with bullet points or tables.
 4. If a query cannot be answered by the available tools, politely state so.
 """
-
-
-
-#  GUARDRAILS & SECURITY JUDGE PROMPTS (Tier 2 LLM Safety & Critic)
-
 
 GUARDRAIL_SECURITY_JUDGE_PROMPT = """You are an AI Security & Guardrail Judge for a college fest platform (EventHub).
 Evaluate the user query below against these strict safety criteria:
@@ -55,7 +39,6 @@ Output valid JSON only:
     "is_safe": true | false,
     "reason": "Brief 1-sentence explanation"
 }"""
-
 
 GUARDRAIL_GROUNDING_JUDGE_PROMPT = """You are a Grounding & Factuality Judge for EventHub.
 Evaluate whether the Generated Answer is 100% faithful to and supported by the Verified Context.
