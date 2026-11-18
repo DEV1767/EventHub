@@ -33,6 +33,7 @@ from agent_services.tools import (
 
 
 class EventOperationsAgent:
+    
     def __init__(self, model_name: str = "openai/gpt-oss-20b", max_tokens: int = 150):
         self.llm = ChatGroq(
             model=model_name,

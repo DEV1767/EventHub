@@ -9,7 +9,9 @@ import {
     inviteCoordinator,
     getEventCoordinators,
     loadEventDataToRedis,
-    getEventDayData
+    getEventDayData,
+    uploadEventDocument,
+    syncEventToAi
 } from "../controllers/event.controllers.js"
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 import { upload } from "../middlewares/multer.middlewares.js"
@@ -43,5 +45,11 @@ router.route("/:id/toggle-rules")
 router.route("/:id/coordinators")
     .post(verifyJWT, inviteCoordinator)
     .get(verifyJWT, getEventCoordinators)
+
+router.route("/:id/ai-documents")
+    .post(verifyJWT, upload.single("document"), uploadEventDocument)
+
+router.route("/:id/ai-sync")
+    .post(verifyJWT, syncEventToAi)
 
 export default router;

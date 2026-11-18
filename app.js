@@ -11,6 +11,7 @@ import expenseRouter from "./src/routes/expense.routes.js"
 import webhookRouter from "./src/routes/webhook.routes.js"
 import analyticsRouter from "./src/routes/analytics.routes.js"
 import logRouter from "./src/routes/log.routes.js"
+import aiRouter from "./src/routes/ai.routes.js"
 import { requestLogger } from "./src/middlewares/logger.middleware.js"
 import errorHandler from "./src/middlewares/error.middleware.js"
 
@@ -58,6 +59,7 @@ app.use("/api/v1/expenses", expenseRouter)
 app.use("/api/v1/webhooks", webhookRouter)
 app.use("/api/v1/analytics", analyticsRouter)
 app.use("/api/v1/admin/logs", logRouter)
+app.use("/api/v1/ai", aiRouter)
 app.use(errorHandler)
 
 export default app

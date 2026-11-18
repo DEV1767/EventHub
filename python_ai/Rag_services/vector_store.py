@@ -11,6 +11,7 @@ load_dotenv()
 
 
 class QdrantVectorService:
+    
     def __init__(self, collection_name: str = "eventhub_knowledge"):
         self.collection_name = collection_name
         self.qdrant_url = os.getenv("QDRANT_URL")

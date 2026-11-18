@@ -33,6 +33,7 @@ except ImportError:
 
 
 class AdvanceEventRAG:
+    
     def __init__(self, documents, qdrant_retriever):
         self.bm25_retriever = BM25Retriever.from_documents(documents)
         self.bm25_retriever.k = 5
@@ -60,7 +61,52 @@ class AdvanceEventRAG:
             model_kwargs={"extra_body": {"reasoning_effort": "low"}}
         )
 
-    def ask(self, query: str, event_title: str) -> str:
+    @classmethod
+    def from_event_id(cls, event_id: str, qdrant_service=None):
+        from agent_services.db_client import get_db
+        from Rag_services.loader import EventDocumentLoader
+        from qdrant_client import models
+        from bson import ObjectId
+
+        db = get_db()
+        try:
+            e_oid = ObjectId(event_id)
+        except Exception:
+            return None
+
+        event = db.events.find_one({"_id": e_oid})
+        if not event:
+            return None
+
+        loader = EventDocumentLoader()
+        docs = loader.load_from_dict(event)
+
+        if qdrant_service is None:
+            from Rag_services.vector_store import QdrantVectorService
+            qdrant_service = QdrantVectorService()
+
+        scoped_retriever = qdrant_service.vector_store.as_retriever(
+            search_kwargs={
+                "k": 5,
+                "filter": models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="metadata.event_id",
+                            match=models.MatchValue(value=str(event_id))
+                        )
+                    ]
+                )
+            }
+        )
+
+        instance = cls(documents=docs, qdrant_retriever=scoped_retriever)
+        instance.event_title = event.get("title", "Event")
+        return instance
+
+    def ask(self, query: str, event_title: str = "") -> str:
+        if not event_title and hasattr(self, "event_title"):
+            event_title = self.event_title
+
         is_safe, message = GuardrailEngine.fast_rag_input_check(query)
         if not is_safe:
             return message

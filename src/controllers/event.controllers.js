@@ -10,6 +10,7 @@ import { getCache, setCache, deleteCache } from "../utils/redis.helpers.js"
 import redisClient from "../config/redis.js"
 import { generateInvitationCode, hashToken } from "../utils/Invitationutils.js"
 import { createEventSchema } from "../validators/joi.validators.js"
+import { uploadPdfToVectorStore, syncEventToVectorStore } from "../utils/aiClient.js"
 
 export const createEvent = asyncHandler(async (req, res) => {
     if (!["faculty", "admin"].includes(req.user.role)) {
@@ -158,6 +159,7 @@ export const createEvent = asyncHandler(async (req, res) => {
     })
 
     await deleteCache(`events:${req.user.collegename}`)
+    syncEventToVectorStore(event).catch(err => console.error("AI Sync Error on createEvent:", err.message))
 
     return res.status(201).json(
         new ApiResponse(201, event, "Event created successfully")
@@ -359,6 +361,7 @@ export const updateEvent = asyncHandler(async (req, res) => {
     await event.save()
     await deleteCache(`event:${event._id}`)
     await deleteCache(`events:${event.collegename}`)
+    syncEventToVectorStore(event).catch(err => console.error("AI Sync Error on updateEvent:", err.message))
 
     return res.status(200).json(
         new ApiResponse(200, event, "Event updated successfully")
@@ -669,5 +672,58 @@ export const getEventDayData = asyncHandler(async (req, res) => {
             checkedInCount,
             pendingCount
         }, "Event day data fetched from Redis")
+    )
+})
+
+export const uploadEventDocument = asyncHandler(async (req, res) => {
+    const { id } = req.params
+    const event = await Event.findById(id)
+    if (!event) {
+        throw new ApiError(404, "Event not found")
+    }
+
+    const isCreator = event.createdBy.toString() === req.user._id.toString()
+    const isFaculty = req.user.role === "faculty"
+    const isCoordinator = await Coordinator.exists({ eventId: event._id, userId: req.user._id, status: "Active" })
+
+    if (!isCreator && !isFaculty && !isCoordinator) {
+        throw new ApiError(403, "Only event coordinators or faculty can upload AI documents")
+    }
+
+    const file = req.file
+    if (!file) {
+        throw new ApiError(400, "Please upload a PDF document (field name: 'document')")
+    }
+
+    try {
+        const result = await uploadPdfToVectorStore(file.path, id, event.title, event.collegename)
+        return res.status(200).json(
+            new ApiResponse(200, result, "Document uploaded and vectorized successfully into Qdrant Cloud")
+        )
+    } finally {
+        if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path)
+        }
+    }
+})
+
+export const syncEventToAi = asyncHandler(async (req, res) => {
+    const { id } = req.params
+    const event = await Event.findById(id)
+    if (!event) {
+        throw new ApiError(404, "Event not found")
+    }
+
+    const isCreator = event.createdBy.toString() === req.user._id.toString()
+    const isFaculty = req.user.role === "faculty"
+    const isCoordinator = await Coordinator.exists({ eventId: event._id, userId: req.user._id, status: "Active" })
+
+    if (!isCreator && !isFaculty && !isCoordinator) {
+        throw new ApiError(403, "Only event coordinators or faculty can sync AI data")
+    }
+
+    const result = await syncEventToVectorStore(event)
+    return res.status(200).json(
+        new ApiResponse(200, result, "Event metadata and rules successfully synced into Qdrant Cloud")
     )
 })

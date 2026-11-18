@@ -28,7 +28,6 @@ def get_event_overview(event_id: str) -> str:
         f"Fee: Rs. {event.get('registrationFee', 0)}"
     )
 
-
 @tool
 def get_gate_attendance(event_id: str, department: str = "") -> str:
     """Returns live check-in attendance and lists absent teams with leader phone numbers."""
@@ -51,7 +50,6 @@ def get_gate_attendance(event_id: str, department: str = "") -> str:
 
     return "\n".join(lines)
 
-
 @tool
 def get_meal_stats(event_id: str, slot_id: str) -> str:
     """Queries Redis to get live counts of claimed meal plates for a slot (e.g. lunch, breakfast)."""
@@ -64,7 +62,6 @@ def get_meal_stats(event_id: str, slot_id: str) -> str:
         return f"Meal Slot '{slot_id}': {count} participants have collected their food plate so far."
     except Exception as e:
         return f"Could not retrieve meal stats: {e}"
-
 
 @tool
 def verify_upi_payment(event_id: str, utr_number: str) -> str:
@@ -83,7 +80,6 @@ def verify_upi_payment(event_id: str, utr_number: str) -> str:
         f"Payment Status: {team.get('paymentStatus')}\n"
         f"Registration Status: {team.get('registrationStatus')}"
     )
-
 
 @tool
 def get_budget_status(event_id: str) -> str:

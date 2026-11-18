@@ -6,6 +6,7 @@ from langchain_community.document_loaders import PyPDFLoader
 
 
 class EventDocumentLoader:
+    
     def __init__(self, chunk_size: int = 600, chunk_overlap: int = 80):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
